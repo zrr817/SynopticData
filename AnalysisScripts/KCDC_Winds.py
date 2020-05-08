@@ -6,59 +6,107 @@ import pandas as pd
 import csv
 from matplotlib import pyplot as plt
 import os
+import glob
 
 #Change working directory to where file is located
 cwd = os.getcwd()
 os.chdir("C:/Users/zrr81/Downloads/Climate Dev/Python/Synoptic Client Data")
 
 #Read in file
-data = pd.read_csv('KCDC.2019-11-01.csv')
+#Need to split into 2 files due to Excel row limits
+path = r'C:\Users\zrr81\Downloads\Climate Dev\Python\Synoptic Client Data'
+all_files = glob.glob(path + "/*.csv")
+li = []
+#Read in files and merge into 1
+for filename in all_files:
+    data = pd.read_csv(filename, parse_dates = ['Date_Time'], index_col = ['Date_Time'])
+    li.append(data)
+df = pd.concat(li)
 
-wind = pd.DataFrame(data, columns = ['wind_speed'])
-#wind.pop(0)
-wind.dropna(thresh=1)
-#print(wind)
+#Skip header rows
+df = df.iloc[1:]
 
-#Build wind gust and datetime DataFrame
-gust = pd.DataFrame(data, columns = ['Date_Time', 'wind_gust'])
+#Create tables with monthly mean & max wind speeds
+#Ignore null values
+wind = pd.DataFrame(df, columns = ['wind_speed'])
+wind.dropna(how = 'any', inplace = True)
+wind['wind_speed'] = wind['wind_speed'].astype(str).astype(float)
+wind_m = wind.resample('M').mean()
+wind_max = wind.resample('M').max()
+
+#Limit to May-November
+wind_m = wind_m[wind_m.index.month.isin([5,6,7,8,9,10])]
+wind_max = wind_max[wind_max.index.month.isin([5,6,7,8,9,10])]
+
+#Build the same mean and max tables for wind gusts
+gust = pd.DataFrame(df, columns = ['wind_gust'])
+
 #Drop all rows that don't contain a gust (inplace)
 gust.dropna(how = 'any', inplace = True)
-#Drop unit/ header row
-gust = gust.drop(gust.index[0])
 #Convert data types from objects to datetime and float
-gust['Date_Time'] = pd.to_datetime(gust['Date_Time'])
 gust['wind_gust'] = gust['wind_gust'].astype(str).astype(float)
-print(gust)
-print(gust.dtypes)
+gust_m = gust.resample('M').mean()
+gust_max = gust.resample('M').max()
 
-#Inc. only Summer (May 1- November 1) in time series
-#Create data frame
-df = pd.DataFrame()
-df['date'] = pd.date_range('5/1/1997', periods = 100000, freq = 'T')
+#Limit to May-November
+gust_m = gust_m[gust_m.index.month.isin([5,6,7,8,9,10])]
+gust_max = gust_max[gust_max.index.month.isin([5,6,7,8,9,10])]
 
-#Create an array of years to loop through
-years = range(1997, 2020, 1)
+#Impose a catch that redefines any wind greater than the gust value as a gust
+i = 0
+for index, row in wind_max.iterrows():
+    if wind_max[i] > gust_max[i]:
+        gust_max[i] = wind_max[i]
+    i += 1
 
-# Set index
-df = df.set_index(df['date'])
+#Follow the same process for peak wind
+pk_wnd = pd.DataFrame(df, columns = ['peak_wind_speed'])
+pk_wnd.dropna(how = 'any', inplace = True)
+pk_wnd['peak_wind_speed'] = pk_wnd['peak_wind_speed'].astype(str).astype(float)
+pk_wnd_m = pk_wnd.resample('M').mean()
+pk_wnd_max = pk_wnd.resample('M').max()
 
-#Select date range for each year
-i = 1
-a = '-05-01 00:00:00Z'
-b = '-11-01 00:00:00Z'
-while i<= len(years) :
-    start = (str(years[i-1]) + a)
-    end = (str(years[i-1]) + b)
-    #print(df.loc[start: end])
-    i+=1
+#Limit to May-November
+pk_wnd_m = pk_wnd_m[pk_wnd_m.index.month.isin([5,6,7,8,9,10])]
+pk_wnd_max = pk_wnd_max[pk_wnd_max.index.month.isin([5,6,7,8,9,10])]
+      
+#Define iterated arrays
+y_array = ['wind_speed', 'wind_gust', 'peak_wind_speed']
+colors = ['red', 'blue', 'green']
+j = 0
 
 #Plot max wind speeds, gusts, and times
-ax = plt.gca()
-gust.plot(kind = 'line' , x = 'Date_Time', y = 'wind_gust', color = 'red')
-#plt.plot(zw.year, zw.population)
-plt.legend(['Wind gusts'])
-plt.xlabel("Date Time")
-plt.ylabel("Wind Gust (m/s)")
-plt.title("May-Nov Maximum Wind Gusts at KCDC")
-plt.show()
+plt.figure(0)
+for frame in [wind_m, gust_m, pk_wnd_m]:
+    if j == 0:
+        ax = frame.reset_index().plot(kind = 'line', x= 'Date_Time', y = y_array[j], legend = False, color = colors[j])
+    else:
+        frame.reset_index().plot(kind = 'line', x= 'Date_Time', y = y_array[j], legend = False, color = colors[j], ax = ax)
+    j += 1
 
+#Define plot specifiers
+plt.xlabel("Date")
+plt.ylabel("Wind Speed (m/s)")
+plt.title("Average Summer (May-Nov) Wind Speeds at KCDC")
+plt.legend(['Average Wind', 'Average Gust', 'Average Peak Wind'])
+plt.savefig('KCDC_Avg_Winds.png')
+
+#Build maximums graph
+plt.figure(1)
+k = 0
+for frame in [wind_max, gust_max, pk_wnd_max]:
+    if k == 0:
+        ax = frame.reset_index().plot(kind = 'line', x= 'Date_Time', y = y_array[k], legend = False, color = colors[k])
+    else:
+        frame.reset_index().plot(kind = 'line', x= 'Date_Time', y = y_array[k], legend = False, color = colors[k], ax = ax)
+    k += 1  
+
+#Define plot specifiers
+plt.xlabel("Date")
+plt.ylabel("Wind Speed (m/s)")
+plt.title("Maximum Summer (May-Nov) Wind Speeds at KCDC")
+plt.legend(['Max Wind', 'Max Gust', 'Max Peak Wind'])
+plt.savefig('KCDC_Max_Winds.png')
+
+#Show plots
+plt.show()
