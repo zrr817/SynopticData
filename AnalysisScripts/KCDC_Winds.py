@@ -54,10 +54,10 @@ gust_max = gust_max[gust_max.index.month.isin([5,6,7,8,9,10])]
 
 #Impose a catch that redefines any wind greater than the gust value as a gust
 i = 0
-for index, row in wind_max.iterrows():
+"""for index, row in wind_max.iterrows():
     if wind_max[i] > gust_max[i]:
         gust_max[i] = wind_max[i]
-    i += 1
+    i += 1"""
 
 #Follow the same process for peak wind
 pk_wnd = pd.DataFrame(df, columns = ['peak_wind_speed'])
